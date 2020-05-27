@@ -1,0 +1,8 @@
+hico*
+vcoco*
+map
+
+__pycache__
+*.hdf5
+*.json
+*.pth

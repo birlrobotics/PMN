@@ -1,0 +1,11 @@
+test_img
+log
+ray_results
+inference_imgs
+__pycache__
+.vscode
+
+
+*.pyc
+*.mp4
+
