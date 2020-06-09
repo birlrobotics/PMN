@@ -47,7 +47,11 @@ def main(args):
 
         print(pg_checkpoint['o_c_l'], pg_checkpoint['lr'], pg_checkpoint['dropout'])
         # pgception = PGception(action_num=24, classifier_mod='cat', o_c_l=[64,64,128,128], last_h_c=256, bias=pg_checkpoint['bias'], drop=pg_checkpoint['dropout'], bn=pg_checkpoint['bn'])
-        pgception = PGception(action_num=pg_checkpoint['a_n'], layers=1, classifier_mod=pg_checkpoint['classifier_mod'], o_c_l=pg_checkpoint['o_c_l'], last_h_c=pg_checkpoint['last_h_c'], bias=pg_checkpoint['bias'], drop=pg_checkpoint['dropout'], bn=pg_checkpoint['bn'], agg_first=pg_checkpoint['agg_first'], attn=pg_checkpoint['attn'])
+        if 'b_l' in pg_checkpoint.keys():
+            print(pg_checkpoint['b_l'])
+            pgception = PGception(action_num=pg_checkpoint['a_n'], layers=1, classifier_mod=pg_checkpoint['classifier_mod'], o_c_l=pg_checkpoint['o_c_l'], last_h_c=pg_checkpoint['last_h_c'], bias=pg_checkpoint['bias'], drop=pg_checkpoint['dropout'], bn=pg_checkpoint['bn'], agg_first=pg_checkpoint['agg_first'], attn=pg_checkpoint['attn'], b_l=[0,4])
+        else:
+            pgception = PGception(action_num=pg_checkpoint['a_n'], layers=1, classifier_mod=pg_checkpoint['classifier_mod'], o_c_l=pg_checkpoint['o_c_l'], last_h_c=pg_checkpoint['last_h_c'], bias=pg_checkpoint['bias'], drop=pg_checkpoint['dropout'], bn=pg_checkpoint['bn'], agg_first=pg_checkpoint['agg_first'], attn=pg_checkpoint['attn'])
         pgception.load_state_dict(pg_checkpoint['state_dict'])
         pgception.to(device)
         pgception.eval()
@@ -87,11 +91,15 @@ def main(args):
             # attn = attn.cpu().detach().numpy()
             # attn_lang = attn_lang.cpu().detach().numpy()
     
-            pg_outputs = pgception(pose_feat)
+            if 'b_l' in checkpoint.keys() and 4 in checkpoint['b_l']:
+                pg_outputs1, pg_outputs2 = pgception(pose_feat)
+                action_scores = nn.Sigmoid()(outputs+pg_outputs1+pg_outputs2)
             # pg_action_scores = nn.Sigmoid()(pg_outputs)
             # pg_action_scores = pg_action_scores.cpu().detach().numpy()
             # action_scores = nn.Sigmoid()(outputs+pg_outputs.mul(mask))
-            action_scores = nn.Sigmoid()(outputs+pg_outputs)
+            else:
+                pg_outputs = pgception(pose_feat)
+                action_scores = nn.Sigmoid()(outputs+pg_outputs)
             # action_scores = nn.Sigmoid()(outputs) + nn.Sigmoid()(pg_outputs)
             action_scores = action_scores.cpu().detach().numpy()
 

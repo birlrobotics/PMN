@@ -43,9 +43,11 @@ class HicoConstants(io.JsonSerializableClass):
         self.hoi_cls_count_json = os.path.join(self.proc_dir,'hoi_cls_count.json')
         self.bin_to_hoi_ids_json = os.path.join(self.proc_dir,'bin_to_hoi_ids.json')
         # path to keep the detection from faster-rcnn
-        self.faster_rcnn_boxes = os.path.join(self.proc_dir,'faster_rcnn_boxes')
-        self.faster_det_fc7_feat = os.path.join(self.faster_rcnn_boxes, 'faster_rcnn_fc7.hdf5')
-        self.faster_det_pool_feat = os.path.join(self.faster_rcnn_boxes, 'faster_rcnn_pool.hdf5')
+        # self.faster_rcnn_boxes = os.path.join(self.proc_dir,'faster_rcnn_boxes')
+        # self.faster_det_fc7_feat = os.path.join(self.faster_rcnn_boxes, 'faster_rcnn_fc7.hdf5')
+        # self.faster_det_pool_feat = os.path.join(self.faster_rcnn_boxes, 'faster_rcnn_pool.hdf5')
+        self.faster_det_fc7_feat = os.path.join(self.proc_dir, 'faster_rcnn_fc7.hdf5')
+        self.faster_rcnn_pose_feat = os.path.join(self.proc_dir, 'faster_rcnn_pose.hdf5')
 
         # select proper boxes from rpn
         self.background_score_thresh = 0.4
@@ -59,8 +61,11 @@ class HicoConstants(io.JsonSerializableClass):
         # set the iou thresh to evaluate instance detection
         self.iou_thresh = 0.5
 
+        # set the iou thresh to assign human pose to detected bounding box
+        self.pose_bbox_iou_thresh = 0.5
+
         # train_val_test data
-        self.bad_faster_rcnn_det_ids = os.path.join('result', 'bad_faster_rcnn_det_imgs.json')
+        self.bad_faster_rcnn_det_ids = os.path.join(self.proc_dir, 'bad_faster_rcnn_det_imgs_edge.json')
         
         if self.feat_type == 'fc7':
             self.hico_trainval_data = os.path.join(self.proc_dir, 'hico_trainval_data_fc7_edge.hdf5')
@@ -72,6 +77,10 @@ class HicoConstants(io.JsonSerializableClass):
         # spatial features
         self.trainval_spatial_feat = os.path.join(self.proc_dir, 'trainval_spatial_features.hdf5')
         self.test_spatial_feat = os.path.join(self.proc_dir, 'test_spatial_features.hdf5')
+
+        # keypoints features
+        self.trainval_keypoints_feat = os.path.join(self.proc_dir, 'trainval_keypoints_feat.hdf5')
+        self.test_keypoints_feat = os.path.join(self.proc_dir, 'test_keypoints_feat.hdf5')
 
         # word2vec
         self.word2vec = os.path.join(self.proc_dir, 'hico_word2vec.hdf5')

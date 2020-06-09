@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 class GCN(nn.Module):
 
-	def __init__(self , A, dim_in, dim_out, bias=True, drop=None, bn=False, init='default', agg_first=True, attn=False):
+	def __init__(self , A, dim_in, dim_out, bias=True, drop=None, bn=False, init='default', agg_first=True, attn=False, part=False):
 		super(GCN, self).__init__()
 		self.A = A
 		self.fc1 = nn.Linear(dim_in, dim_out, bias=bias)
@@ -13,6 +13,7 @@ class GCN(nn.Module):
 		self.bn = bn
 		self.agg_first = agg_first
 		self.attn = attn
+		self.part = part
 		if attn:
 			self.m = (self.A > 0)
 			self.M = nn.Parameter(torch.ones(1,len(self.m.nonzero()), dtype=torch.float))
@@ -21,7 +22,9 @@ class GCN(nn.Module):
 		if bn:
 			# (N,L,C) or (N, C)
 			# self.batchnorm = nn.BatchNorm1d(dim_in)
-			self.batchnorm = nn.BatchNorm1d(17)
+			if part:	self.batchnorm = nn.BatchNorm1d(5)
+			else:  self.batchnorm = nn.BatchNorm1d(17)
+
 
 	def _initialize_weights(self, mod):
 		'''
@@ -53,6 +56,9 @@ class GCN(nn.Module):
 			# print(1)
 			X = X.permute(1,0,2).contiguous().view(k_n,-1)
 			X = self.A.mm(X).view(k_n,b_n,-1).permute(1,0,2)
+			if self.part:
+				# import ipdb; ipdb.set_trace()
+				X = X[:,[0,5,6,11,12],:]
 			if self.bn:
 				X = self.batchnorm(X)
 			X = F.relu(self.fc1(X))

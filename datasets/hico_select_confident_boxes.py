@@ -155,7 +155,6 @@ def select(data_const):
     select_boxes_dir = data_const.proc_dir
 
     # Print where the boxes are coming from and where the output is written
-    print(f'Boxes will be read from: {data_const.faster_rcnn_boxes}')
     print(f'Boxes will be written to: {select_boxes_dir}')
 
     print('Loading anno_list.json ...')
@@ -166,6 +165,9 @@ def select(data_const):
     hdf5_file = os.path.join(select_boxes_dir,'selected_coco_cls_dets.hdf5')
     f = h5py.File(hdf5_file,'w')
 
+    # Load faster-rcnn detection results
+    all_faster_rcnn_det_data = h5py.File(data_const.faster_det_fc7_feat, 'r')
+    all_nms_keep_indices = io.load_json_object(os.path.join(data_const.proc_dir, 'nms_keep_indices.json'))
     print('Selecting boxes ...')
     for anno in tqdm(anno_list):
         global_id = anno['global_id']
@@ -175,26 +177,22 @@ def select(data_const):
         #     data_const.human_score_thresh = 0.1
         #     data_const.object_score_thresh = 0.1
 
-        boxes_npy = os.path.join(
-            data_const.faster_rcnn_boxes,
-            f'{global_id}_boxes.npy')
-        boxes = np.load(boxes_npy)
-        
-        scores_npy = os.path.join(
-            data_const.faster_rcnn_boxes,
-            f'{global_id}_scores.npy')
-        scores = np.load(scores_npy)
-        
-        nms_keep_indices_json = os.path.join(
-            data_const.faster_rcnn_boxes,
-            f'{global_id}_nms_keep_indices.json')
-        nms_keep_indices = io.load_json_object(nms_keep_indices_json)
+
+        boxes = all_faster_rcnn_det_data[global_id]['boxes']
+        scores = all_faster_rcnn_det_data[global_id]['scores']
+        features = all_faster_rcnn_det_data[global_id]['fc7_feat']
+        nms_keep_indices = all_nms_keep_indices[global_id]
 
         # import ipdb; ipdb.set_trace()
         selected_dets, start_end_ids = select_dets(boxes,scores,nms_keep_indices,data_const)
+        selected_feat = []
+        for rpn_id in selected_dets[:, 5]:
+            selected_feat.append(np.expand_dims(features[rpn_id, :], 0))
+        selected_feat = np.concatenate(selected_feat, axis=0)
         f.create_group(global_id)
         f[global_id].create_dataset('boxes_scores_rpn_ids',data=selected_dets)
         f[global_id].create_dataset('start_end_ids',data=start_end_ids)
+        f[global_id].create_dataset('features',data=selected_feat)
         
     f.close()
 

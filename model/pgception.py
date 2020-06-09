@@ -38,7 +38,10 @@ class PGception_Layer(nn.Module):
 					9:[5,7,9], 10:[6,8,10], 11:[0,5,6,7,11,12,13,14,15], 12:[0,5,6,8,11,12,13,14,16], 13:[5,11,12,13,15], 14:[6,11,12,14,16], 15:[11,13,15], 16:[12,14,16]}
 		adj2 = adj_construction(inds=adj2_inds, keypoint_num=keypoint_num, symmetric=True)
 		adj_all = adj_construction(inds=None)
-		A = [adj0, adj1, adj2, adj_all]
+
+		adj_part_inds = {0:[0,1,2,3,4], 1:[1], 2:[2], 3:[3], 4:[4], 5:[5,7,9], 6:[6,8,10], 7:[7], 8:[8], 9:[9], 10:[10], 11:[11,13,15], 12:[12,14,16], 13:[13], 14:[14], 15:[15], 16:[16]}
+		adj_part = adj_construction(inds=adj_part_inds, keypoint_num=keypoint_num, symmetric=True)
+		A = [adj0, adj1, adj2, adj_all, adj_part]
 		
 		# import ipdb; ipdb.set_trace()
 		self.branch_list = branch_list
@@ -50,7 +53,8 @@ class PGception_Layer(nn.Module):
 			self.branch_2 = GCN(A[2], in_channel, out_channel_list[2], bias=bias, drop=drop, bn=bn, init=init, agg_first=agg_first, attn=attn)
 		if 3 in self.branch_list:
 			self.branch_all = GCN(A[3], in_channel, out_channel_list[3], bias=bias, drop=drop, bn=bn, init=init, agg_first=agg_first, attn=attn)
-
+		if 4 in self.branch_list:
+			self.branch_part = GCN(A[4], in_channel, out_channel_list[4], bias=bias, drop=drop, bn=bn, init=init, agg_first=agg_first, attn=attn, part=True)
 	def forward(self, X):
 		# import ipdb; ipdb.set_trace()
 		output = []
@@ -66,6 +70,9 @@ class PGception_Layer(nn.Module):
 		if 3 in self.branch_list:
 			branch_all = self.branch_all(X)
 			output.append(branch_all)
+		if 4 in self.branch_list:
+			branch_part = self.branch_part(X)
+			return torch.cat(output, 2), branch_part
 		
 		return torch.cat(output, 2)
 
@@ -92,14 +99,15 @@ class Block(nn.Module):
 		return self.pgception(X)
 
 class PGception(nn.Module):
-	def __init__(self, action_num=24, layers=1, classifier_mod="cat", o_c_l=[64,64,128,128], last_h_c=256, bias=True, drop=None, bn=False, agg_first=True, attn=False):
+	def __init__(self, action_num=24, layers=1, classifier_mod="cat", o_c_l=[64,64,128,128], b_l=[0,1,2,3] ,last_h_c=256, bias=True, drop=None, bn=False, agg_first=True, attn=False):
 		super(PGception, self).__init__()
 		self.out_channel_list = np.array(o_c_l)
-		self.branch_list = [0,1,2,3]
+		self.branch_list = b_l
 		self.classifier_mod = classifier_mod
 		self.drop = drop
 		self.bn = bn
 		self.layers = layers
+		# import ipdb; ipdb.set_trace()
 		self.block1 = Block(in_channel= 2, mid_channel=128, out_channel_list=self.out_channel_list, branch_list=self.branch_list, bias=bias, drop=drop, bn=bn, agg_first=agg_first, attn=attn)
 		if layers == 2:
 			self.block2 = Block(in_channel= sum(self.out_channel_list[self.branch_list]), mid_channel=128, out_channel_list=self.out_channel_list, branch_list=self.branch_list, bias=bias, drop=drop, bn=bn, agg_first=agg_first, attn=attn)
@@ -113,7 +121,11 @@ class PGception(nn.Module):
 							)
 		if classifier_mod == "cat":
 			# add a MLP to reduce the size of channels
-			self.linear = nn.Linear(sum(self.out_channel_list[self.branch_list]), 64, bias=True)
+			if 4 in b_l:
+				# b_l.remove(4) // do not do that
+				self.linear = nn.Linear(sum(self.out_channel_list[self.branch_list[:-1]]), 64, bias=True)
+			else:
+				self.linear = nn.Linear(sum(self.out_channel_list[self.branch_list]), 64, bias=True)
 			if drop:
 				self.dropout = nn.Dropout(drop)
 			if bn:
@@ -125,10 +137,24 @@ class PGception(nn.Module):
 								nn.Dropout(drop),
 								nn.Linear(last_h_c, action_num, bias),
 							)
+			if 4 in b_l:
+				self.linear_part = nn.Linear(self.out_channel_list[4], 64, bias=True)
+				if bn:
+					self.batchnorm_part = nn.BatchNorm1d(5)
+				self.classifier_part = nn.Sequential(
+									   nn.Linear(64*5, last_h_c, bias),
+									   nn.BatchNorm1d(last_h_c),
+									   nn.ReLU(inplace=True),
+									   nn.Dropout(drop),
+									   nn.Linear(last_h_c, action_num, bias),
+									)
 
 	def forward(self, x):
 		# import ipdb; ipdb.set_trace()
-		x = self.block1(x)
+		if 4 in self.branch_list:
+			x, x_part = self.block1(x)
+		else:
+			x = self.block1(x)
 		if self.layers >1:
 			x = self.block2(x)
 		if self.classifier_mod == "mean":
@@ -142,6 +168,16 @@ class PGception(nn.Module):
 			x = F.relu(x)
 			if self.drop:
 				x = self.dropout(x)
+			# leverage the network for body part
+			if 4 in self.branch_list:
+				x_part = self.linear_part(x_part)
+				if self.bn:
+					x_part = self.batchnorm_part(x_part)
+				x_part = F.relu(x_part)
+				if self.drop:
+					x_part = self.dropout(x_part)
+				return self.classifier(x.view(x.shape[0],-1)), self.classifier_part(x_part.view(x_part.shape[0],-1))
+
 			return self.classifier(x.view(x.shape[0],-1))
         
 if __name__ == "__main__":

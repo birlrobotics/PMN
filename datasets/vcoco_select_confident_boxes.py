@@ -168,12 +168,11 @@ def select(data_const):
             selected_feat = []
             for rpn_id in selected_dets[:, 5]:
                 selected_feat.append(np.expand_dims(features[rpn_id, :], 0))
-            selected_feat = np.concatenate(selected_feat, axis=0
-            )
+            selected_feat = np.concatenate(selected_feat, axis=0)
             f.create_group(str(img_id))
             f[str(img_id)].create_dataset('boxes_scores_rpn_ids',data=selected_dets)
             f[str(img_id)].create_dataset('start_end_ids',data=start_end_ids)
-            f[str(img_id)].create_dataset('features',data=selected_feat)
+            f[str(img_id)].create_dataset('select_feat',data=selected_feat)
             
         f.close()
 

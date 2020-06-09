@@ -53,20 +53,40 @@ def get_node_index(classname, bbox, det_classes, det_boxes, node_num, labeled=Tr
                 max_iou_index = i_node
     return max_iou_index
 
-def parse_data(data_const,args):
+def assign_pose(det_human_boxes, det_pose_boxes, det_pose, data_const):
+    global MISS_POSE_NUM
+    num_keypoints = det_pose.shape[1]
+    assigned_pose = []
+    for human_box in det_human_boxes:
+        max_iou_index = -1
+        max_iou = data_const.pose_bbox_iou_thresh     # 0.5
+        keypoints = np.zeros([num_keypoints, 2])
+        for idx in range(det_pose.shape[0]):
+            iou = compute_iou(human_box, det_pose_boxes[idx, :])
+            if iou > max_iou:
+                max_iou = iou
+                max_iou_index = idx
+        if max_iou_index != -1:
+            keypoints = det_pose[max_iou_index,:,:2]        
+            det_pose_boxes =  np.delete(det_pose_boxes, max_iou_index, axis=0)
+            det_pose =  np.delete(det_pose, max_iou_index, axis=0)
+        else:
+            MISS_POSE_NUM += 1
+        # ipdb.set_trace()
+        assigned_pose.append(keypoints)
+    return np.array(assigned_pose)
 
+def parse_data(data_const,args):
+    global MISS_POSE_NUM
     assert os.path.exists(data_const.clean_dir), 'Please check the path to annotion file!'
 
     anno_data = scio.loadmat(data_const.clean_dir + '/anno_bbox.mat')
     print('Load original data successfully!')
 
     boxes_scores_rpn_ids_labels = h5py.File(data_const.boxes_scores_rpn_ids_labels, 'r')
+    # load detected pose feature
+    human_pose_det = h5py.File(os.path.join(data_const.proc_dir, "faster_rcnn_pose.hdf5"), 'r')
     print('Load selected instance detection data successfully!')
-
-    if args.feat_type == 'fc7':
-        boxes_feat = h5py.File(data_const.faster_det_fc7_feat, 'r')
-    else:
-        boxes_feat = h5py.File(data_const.faster_det_pool_feat, 'r')
     
     action_class_num = len(metadata.action_classes)
     list_action = anno_data['list_action']
@@ -75,7 +95,7 @@ def parse_data(data_const,args):
     bad_dets_imgs = {'0': [], '1': [], 'no_human': []} 
     # parsing data
     for phase in ['bbox_train', 'bbox_test']:
-
+        ALL_POSE_NUM=0; MISS_POSE_NUM=0; O_H_BOX=0
         if not args.vis_result:
             if phase == 'bbox_train':
                 if args.feat_type == 'fc7':
@@ -109,7 +129,9 @@ def parse_data(data_const,args):
             img_name = data['filename'][0,i_img][0]
             global_id = img_name.split(".")[0]
             selected_det_data = boxes_scores_rpn_ids_labels[global_id]['boxes_scores_rpn_ids']
-            det_feat = boxes_feat[global_id]
+            feat = boxes_scores_rpn_ids_labels[global_id]['features']
+            det_pose = human_pose_det[global_id]['keypoints']
+            det_pose_boxes = human_pose_det[global_id]['boxes'] 
 
             if selected_det_data.shape[0] == 0:
                 bad_dets_imgs['0'].append(global_id)
@@ -119,13 +141,7 @@ def parse_data(data_const,args):
                 continue
             # TypeError: Indexing elements must be in increasing order
             # det_feat = det_feat[selected_det_data[:, 5], :]
-            feat = []
-            for rpn_id in selected_det_data[:, 5]:
-                feat.append(np.expand_dims(det_feat[rpn_id, :], 0))
-            try:
-                feat = np.concatenate(feat, axis=0)
-            except Exception as e:
-                ipdb.set_trace()
+
             det_boxes = selected_det_data[:, :4]
             det_class = selected_det_data[:, -1].astype(int)
             det_scores = selected_det_data[:, 4]
@@ -143,9 +159,12 @@ def parse_data(data_const,args):
             # calculate the number of nodes
             human_num = len(np.where(det_class == 1)[0])
             node_num = len(det_class)
-            labeled_edge_list = np.cumsum(node_num - np.arange(human_num) -1)
-            labeled_edge_num = labeled_edge_list[-1]
-            labeled_edge_list[-1] = 0
+            # labeled_edge_list = np.cumsum(node_num - np.arange(human_num) -1)
+            # labeled_edge_num = labeled_edge_list[-1]
+            # labeled_edge_list[-1] = 0
+
+            labeled_edge_num = human_num * (node_num-1)
+            
             # import ipdb; ipdb.set_trace()
             # parse the original data to get node labels
             edge_labels = np.zeros((labeled_edge_num, action_class_num))
@@ -180,13 +199,23 @@ def parse_data(data_const,args):
                         if args.vis_result:
                             raw_action[action_id] = 1
                             image_gt = vis_img(image_gt, [[h_x1, h_y1, h_x2, h_y2],[o_x1, o_y1, o_x2, o_y2]], [1, metadata.coco_classes.index(classname)], raw_action=action_id, data_gt=True)
-
-                        if human_index != -1 and obj_index != -1:
-                            edge_idx = labeled_edge_list[human_index-1] + (obj_index-human_index-1)
+                        
+                        if human_index >= obj_index and obj_index !=-1:
+                            # import ipdb; ipdb.set_trace()
+                            O_H_BOX += 1
+                        if human_index != -1 and obj_index != -1 and human_index != obj_index:
+                            if human_index > obj_index:
+                                edge_idx = human_index * (node_num-1) + obj_index
+                            else:
+                                edge_idx = human_index * (node_num-1) + obj_index - 1
+                        
+                            # edge_idx = labeled_edge_list[human_index-1] + (obj_index-human_index-1)
                             edge_labels[edge_idx, action_id] = 1 
                 except IndexError:
                     pass
             # visualizing result instead of saving result
+            assigned_pose = assign_pose(det_boxes[:human_num, :], det_pose_boxes, det_pose, data_const)
+            ALL_POSE_NUM += human_num
             if args.vis_result:
                 # ipdb.set_trace()
                 image_res = Image.open(os.path.join(data_const.clean_dir, 'images/train2015', img_name)).convert('RGB')
@@ -213,11 +242,14 @@ def parse_data(data_const,args):
                 save_data[global_id].create_dataset('scores', data=det_scores)
                 save_data[global_id].create_dataset('edge_labels', data=edge_labels)
                 save_data[global_id].create_dataset('feature', data=feat)
+                save_data[global_id].create_dataset('keypoints', data=assigned_pose)
         if not args.vis_result:
             save_data.close()
+
+        print(f'all pose: {ALL_POSE_NUM}, miss pose: {MISS_POSE_NUM}, drop rate: {MISS_POSE_NUM/ALL_POSE_NUM}, o_h_boxes: {O_H_BOX}')
     # create file to save images with no selected detection
     print(f"bad instance detection: <0 det>---{len(bad_dets_imgs['0'])}, <1 det>---{len(bad_dets_imgs['1'])}, <no human det>---{len(bad_dets_imgs['no_human'])}")
-    io.dump_json_object(bad_dets_imgs, os.path.join('result', 'bad_faster_rcnn_det_imgs_edge.json'))
+    io.dump_json_object(bad_dets_imgs, data_const.bad_faster_rcnn_det_ids)
 
     print('Finished parsing datas!')    
 
@@ -266,6 +298,7 @@ if __name__ == "__main__":
     if args.frcnn:
         faster_rcnn_det_result('HICO_train2015_00014663.jpg')
     else:
+        MISS_POSE_NUM = 0
         data_const = HicoConstants()
         # parse training data
         parse_data(data_const, args)

@@ -8,9 +8,9 @@ from torch import nn, optim
 from torch.utils.data import DataLoader
 from tensorboardX import SummaryWriter
 
-from datasets.vcoco_constants import VcocoConstants
-from datasets.vcoco_dataset import VcocoDataset, collate_fn
-from model.vsgats.vcoco_model import AGRNN
+from datasets.hico_constants import HicoConstants
+from datasets.hico_dataset import HicoDataset, collate_fn
+from model.vsgats.model import AGRNN
 from model.pgception import PGception
 import utils.io as io
 
@@ -19,8 +19,8 @@ import utils.io as io
 ###########################################################################################
 def run_model(args, data_const):
     # prepare data
-    train_dataset = VcocoDataset(data_const=data_const, subset="vcoco_train", pg_only=False)
-    val_dataset = VcocoDataset(data_const=data_const, subset="vcoco_val", pg_only=False)
+    train_dataset = HicoDataset(data_const=data_const, subset='train')
+    val_dataset = HicoDataset(data_const=data_const, subset='val')
     dataset = {'train': train_dataset, 'val': val_dataset}
 
     train_dataloader = DataLoader(dataset=dataset['train'], batch_size=args.batch_size, shuffle=True, pin_memory=True, collate_fn=collate_fn)
@@ -43,7 +43,6 @@ def run_model(args, data_const):
     vs_gats.eval()
 
     # [64,64,128,128], [128,256,256,256]
-    print(args.b_l, args.o_c_l)
     model = PGception(action_num=args.a_n, layers=args.n_layers, classifier_mod=args.c_m, o_c_l=args.o_c_l, b_l=args.b_l,
                       last_h_c=args.last_h_c, bias=args.bias, drop=args.d_p, bn=args.bn, agg_first=args.agg_first, attn=args.attn)
     # load pretrained model
@@ -68,27 +67,19 @@ def run_model(args, data_const):
     for epoch in range(args.start_epoch, args.epoch):
         # each epoch has a training and validation step
         epoch_loss = 0
-        # for phase in ['train', 'val']:
         for phase in ['train', 'val']:
+        # for phase in ['train']:
             start_time = time.time()
             running_loss = 0
-            # all_edge = 0
-            idx = 0
             # import ipdb; ipdb.set_trace()
             for data in tqdm(dataloader[phase]):
-                # img_name = data['img_name']
-                # det_boxes = data['det_boxes']
                 roi_labels = data['roi_labels']
-                # roi_scores = data['roi_scores']
                 node_num = data['node_num']
-                # edge_num = data['edge_num']
                 features = data['features']
                 spatial_feat = data['spatial_feat']
                 word2vec = data['word2vec']
                 edge_labels = data['edge_labels']
                 pose_feat = data["pose_feat"]
-                # labels = data['pose_labels']
-                # mask = data['mask']
                 features, spatial_feat, word2vec, edge_labels = features.to(device), spatial_feat.to(device), word2vec.to(device), edge_labels.to(device)
                 pose_feat, edge_labels = pose_feat.to(device), edge_labels.to(device)
                 # mask = mask.to(device)
@@ -96,32 +87,14 @@ def run_model(args, data_const):
                     model.train()
                     model.zero_grad()
                     # import ipdb; ipdb.set_trace()
-                    # outputs1 = vs_gats(node_num, features, spatial_feat, word2vec, roi_labels, validation=True)
-                    # outputs2 = model(pose_feat)
-                    # outputs = outputs1+outputs2
-                    # outputs = vs_gats(node_num, features, spatial_feat, word2vec, roi_labels, validation=True) + model(pose_feat).mul(mask) 
-                    if 4 in args.b_l:
-                        outputs1, outputs2 = model(pose_feat)
-                        outputs = outputs1 + outputs2 + vs_gats(node_num, features, spatial_feat, word2vec, roi_labels, validation=True) 
-                    else:
-                        outputs = vs_gats(node_num, features, spatial_feat, word2vec, roi_labels, validation=True) + model(pose_feat)
-                    # outputs = model(pose_feat)
+                    outputs = vs_gats(node_num, features, spatial_feat, word2vec, roi_labels, validation=True) + model(pose_feat)
                     loss = criterion(outputs, edge_labels)
                     loss.backward()
                     optimizer.step()
                 else:
                     model.eval()
                     with torch.no_grad():
-                        # outputs1 = vs_gats(node_num, features, spatial_feat, word2vec, roi_labels, validation=True)
-                        # outputs2 = model(pose_feat)
-                        # outputs = outputs1+outputs2
-                        # outputs = vs_gats(node_num, features, spatial_feat, word2vec, roi_labels, validation=True) + model(pose_feat).mul(mask)
-                        if 4 in args.b_l:
-                            outputs1, outputs2 = model(pose_feat)
-                            outputs = outputs1 + outputs2 + vs_gats(node_num, features, spatial_feat, word2vec, roi_labels, validation=True) 
-                        else:
-                            outputs = vs_gats(node_num, features, spatial_feat, word2vec, roi_labels, validation=True) + model(pose_feat)
-                        # outputs = model(pose_feat)
+                        outputs = vs_gats(node_num, features, spatial_feat, word2vec, roi_labels, validation=True) + model(pose_feat)
                         loss = criterion(outputs, edge_labels)
 
                 running_loss += loss.item() * edge_labels.shape[0]
@@ -137,11 +110,11 @@ def run_model(args, data_const):
                 end_time = time.time()
                 print("[{}] Epoch: {}/{} Loss: {} Execution time: {}".format(\
                         phase, epoch+1, args.epoch, epoch_loss, (end_time-start_time)))
-        # if args.scheduler_step and epoch % 10 == 9 and epoch < 300:    
-        if args.scheduler_step:   
+        # if args.scheduler_step and epoch % 10 == 9 and epoch < 300:     
+        if args.scheduler_step:  
             scheduler.step()
         # save model epoch_loss<0.29 or 
-        if epoch % args.save_every == (args.save_every - 1) and epoch >= (300-1):
+        if epoch % args.save_every == (args.save_every - 1) and epoch >= (100-1):
             checkpoint = { 
                             'lr': args.lr,
                            'b_s': args.batch_size,
@@ -190,11 +163,11 @@ parser.add_argument('--bias', type=str2bool, default='true',
                     help="add bias to fc layers or not: True")
 parser.add_argument('--bn', type=str2bool, default='false', 
                     help='use batch normailzation or not: true')
-parser.add_argument('--epoch', type=int, default=1000,
+parser.add_argument('--epoch', type=int, default=300,
                     help='number of epochs to train: 300') 
 parser.add_argument('--scheduler_step', '--s_s', type=int, default=0,
                     help='number of epochs to train: 0')
-parser.add_argument('--o_c_l', type=int, nargs='+', default= [64,64,128,128,128],     # [128,256,256,256] [64,64,128,128]
+parser.add_argument('--o_c_l', type=list, default= [64,64,128,128],     # [128,256,256,256] [64,64,128,128]
                     help='out channel in each branch in PGception layer: [128,256,256,256]')
 parser.add_argument('--b_l', type=int, nargs='+', default= [0,1,2,3],     # [128,256,256,256] [64,64,128,128]
                     help='which branchs are in PGception layer: [0,1,2,3]')
@@ -206,8 +179,8 @@ parser.add_argument('--c_m',  type=str, default="cat", choices=['cat', 'mean'],
                     help='the model of last classifier: cat or mean')
 parser.add_argument('--optim',  type=str, default='adam', choices=['sgd', 'adam', 'amsgrad'],
                     help='which optimizer to be use: sgd, adam, amsgrad')
-parser.add_argument('--a_n',  type=int, default=24,
-                    help='acition number: 24')
+parser.add_argument('--a_n',  type=int, default=117,
+                    help='acition number: 117')
 parser.add_argument('--n_layers', type=int, default=1,
                     help='number of inception blocks: 1')
 parser.add_argument('--agg_first', '--a_f', type=str2bool, default='true', 
@@ -217,22 +190,22 @@ parser.add_argument('--attn',  type=str2bool, default='false',
 
 parser.add_argument('--pretrained', '-p', type=str, default=None,
                     help='location of the pretrained model file for training: None')
-parser.add_argument('--main_pretrained', '--m_p', type=str, default='/home/birl/ml_dl_projects/bigjun/hoi/PGception/checkpoints/vcoco_vsgats/hico_checkpoint_600_epoch.pth',
-                    help='Location of the checkpoint file of exciting method: /home/birl/ml_dl_projects/bigjun/hoi/PGception/checkpoints/vcoco_vsgats/hico_checkpoint_600_epoch.pth')
-parser.add_argument('--log_dir', type=str, default='./log/vcoco',
+parser.add_argument('--main_pretrained', '--m_p', type=str, default='/home/birl/ml_dl_projects/bigjun/hoi/PGception/checkpoints/hico_vsgats/checkpoint_260_epoch.pth',
+                    help='Location of the checkpoint file of exciting method: /home/birl/ml_dl_projects/bigjun/hoi/PGception/checkpoints/hico_vsgats/checkpoint_260_epoch.pth')
+parser.add_argument('--log_dir', type=str, default='./log/hico',
                     help='path to save the log data like loss\accuracy... : ./log') 
-parser.add_argument('--save_dir', type=str, default='./checkpoints/vcoco',
+parser.add_argument('--save_dir', type=str, default='./checkpoints/hico',
                     help='path to save the checkpoints: ./checkpoints/vcoco')
 parser.add_argument('--exp_ver', '--e_v', type=str, default='v1', 
                     help='the version of code, will create subdir in log/ && checkpoints/ ')
 
 parser.add_argument('--print_every', type=int, default=10,
                     help='number of steps for printing training and validation loss: 10')
-parser.add_argument('--save_every', type=int, default=20,
+parser.add_argument('--save_every', type=int, default=10,
                     help='number of steps for saving the model parameters: 50') 
 
 args = parser.parse_args() 
 
 if __name__ == "__main__":
-    data_const = VcocoConstants()
+    data_const = HicoConstants()
     run_model(args, data_const)

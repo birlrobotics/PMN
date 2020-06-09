@@ -18,15 +18,17 @@ class HicoDataset(Dataset):
     '''
     data_sample_count = 0   # record how many times to process data sampling 
 
-    def __init__(self, data_const=HicoConstants(), subset='train', data_aug=False, sampler=None):
+    def __init__(self, data_const=HicoConstants(), subset='train', data_aug=False, sampler=None, test=False):
         super(HicoDataset, self).__init__()
         
         self.data_aug = data_aug
         self.data_const = data_const
+        self.test = test
         self.subset_ids = self._load_subset_ids(subset, sampler)
         self.sub_app_data = self._load_subset_app_data(subset)
         self.sub_spatial_data = self._load_subset_spatial_data(subset)
         self.word2vec = h5py.File(self.data_const.word2vec, 'r')
+        self.sub_pose_feat = self._load_subset_pose_data(subset)
 
     def _load_subset_ids(self, subset, sampler):
         global_ids = io.load_json_object(self.data_const.split_ids_json)
@@ -55,6 +57,15 @@ class HicoDataset(Dataset):
             return h5py.File(self.data_const.trainval_spatial_feat, 'r')
         elif subset == 'test':
             return h5py.File(self.data_const.test_spatial_feat, 'r')
+        else:
+            print('Please double check the name of subset!!!')
+            sys.exit(1)
+
+    def _load_subset_pose_data(self, subset):
+        if subset == 'train' or subset == 'val' or subset == 'train_val':
+            return h5py.File(self.data_const.trainval_keypoints_feat, 'r')
+        elif subset == 'test':
+            return h5py.File(self.data_const.test_keypoints_feat, 'r')
         else:
             print('Please double check the name of subset!!!')
             sys.exit(1)
@@ -149,20 +160,19 @@ class HicoDataset(Dataset):
         data = {}
         single_app_data = self.sub_app_data[global_id]
         single_spatial_data = self.sub_spatial_data[global_id]
-        data['global_id'] = global_id
-        data['img_name'] = global_id + '.jpg'
-        data['det_boxes'] = single_app_data['boxes'][:]
+        single_pose_data = self.sub_pose_feat[str(global_id)]
         data['roi_labels'] = single_app_data['classes'][:]
-        data['roi_scores'] = single_app_data['scores'][:]
         data['node_num'] = single_app_data['node_num'].value
-        # data['node_labels'] = single_app_data['node_labels'][:]
         data['edge_labels'] = single_app_data['edge_labels'][:]
-        data['edge_num'] = data['edge_labels'].shape[0]
         data['features'] = single_app_data['feature'][:]
         data['spatial_feat'] = single_spatial_data[:]
-        data['node_one_hot'] = self._get_obj_one_hot(data['roi_labels'])
         data['word2vec'] = self._get_word2vec(data['roi_labels'])
-        data['interactive_label'] = self._get_interactive_label(data['edge_labels'])
+        data['pose_feat'] = single_pose_data[:]
+        if self.test:
+            data['global_id'] = global_id
+            data['img_name'] = global_id + '.jpg'
+            data['det_boxes'] = single_app_data['boxes'][:]
+            data['roi_scores'] = single_app_data['scores'][:]
         # import ipdb; ipdb.set_trace()
         if self.data_aug:
             thresh = random.random()
@@ -204,36 +214,29 @@ def collate_fn(batch):
     batch_data['roi_scores'] = []
     batch_data['node_num'] = []
     batch_data['edge_labels'] = []
-    batch_data['edge_num'] = []
-    # batch_data['node_labels'] = []
     batch_data['features'] = []
     batch_data['spatial_feat'] = []
-    batch_data['node_one_hot'] = []
     batch_data['word2vec'] = []
-    batch_data['interactive_label'] = []
+    batch_data['pose_feat'] = []
     for data in batch:
-        batch_data['global_id'].append(data['global_id'])
-        batch_data['img_name'].append(data['img_name'])
-        batch_data['det_boxes'].append(data['det_boxes'])
         batch_data['roi_labels'].append(data['roi_labels'])
-        batch_data['roi_scores'].append(data['roi_scores'])
         batch_data['node_num'].append(data['node_num'])
-        # batch_data['node_labels'].append(data['node_labels'])
         batch_data['edge_labels'].append(data['edge_labels'])
-        batch_data['edge_num'].append(data['edge_num'])
         batch_data['features'].append(data['features'])
         batch_data['spatial_feat'].append(data['spatial_feat'])
-        batch_data['node_one_hot'].append(data['node_one_hot'])
         batch_data['word2vec'].append(data['word2vec'])
-        batch_data['interactive_label'].append(data['interactive_label'])
+        batch_data["pose_feat"].append(data["pose_feat"])
+        if 'global_id' in data.keys():
+            batch_data['global_id'].append(data['global_id'])
+            batch_data['img_name'].append(data['img_name'])
+            batch_data['det_boxes'].append(data['det_boxes'])
+            batch_data['roi_scores'].append(data['roi_scores'])
 
     # import ipdb; ipdb.set_trace()
-    # batch_data['node_labels'] = torch.FloatTensor(np.concatenate(batch_data['node_labels'], axis=0))
     batch_data['edge_labels'] = torch.FloatTensor(np.concatenate(batch_data['edge_labels'], axis=0))
     batch_data['features'] = torch.FloatTensor(np.concatenate(batch_data['features'], axis=0))
     batch_data['spatial_feat'] = torch.FloatTensor(np.concatenate(batch_data['spatial_feat'], axis=0))
-    batch_data['node_one_hot'] = torch.FloatTensor(np.concatenate(batch_data['node_one_hot'], axis=0))
     batch_data['word2vec'] = torch.FloatTensor(np.concatenate(batch_data['word2vec'], axis=0))
-    batch_data['interactive_label'] = torch.FloatTensor(np.concatenate(batch_data['interactive_label'], axis=0))
+    batch_data['pose_feat'] = torch.FloatTensor(np.concatenate(batch_data['pose_feat'], axis=0))
 
     return batch_data
