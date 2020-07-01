@@ -19,7 +19,7 @@ import utils.io as io
 ###########################################################################################
 def run_model(args, data_const):
     # prepare data
-    train_dataset = HicoDataset(data_const=data_const, subset='train')
+    train_dataset = HicoDataset(data_const=data_const, subset='train_val')
     val_dataset = HicoDataset(data_const=data_const, subset='val')
     dataset = {'train': train_dataset, 'val': val_dataset}
 
@@ -67,8 +67,8 @@ def run_model(args, data_const):
     for epoch in range(args.start_epoch, args.epoch):
         # each epoch has a training and validation step
         epoch_loss = 0
-        for phase in ['train', 'val']:
-        # for phase in ['train']:
+        # for phase in ['train', 'val']:
+        for phase in ['train']:
             start_time = time.time()
             running_loss = 0
             # import ipdb; ipdb.set_trace()
@@ -100,13 +100,13 @@ def run_model(args, data_const):
                 running_loss += loss.item() * edge_labels.shape[0]
 
             epoch_loss = running_loss / len(dataset[phase])
-            if phase == 'train':
-                train_loss = epoch_loss 
-            else:
-                writer.add_scalars('trainval_loss_epoch', {'train': train_loss, 'val': epoch_loss}, epoch)
-            # writer.add_scalars('trainval_loss_epoch', {'train': epoch_loss}, epoch)
+            # if phase == 'train':
+            #     train_loss = epoch_loss 
+            # else:
+            #     writer.add_scalars('trainval_loss_epoch', {'train': train_loss, 'val': epoch_loss}, epoch)
+            writer.add_scalars('trainval_loss_epoch', {'train': epoch_loss}, epoch)
             # print data
-            if (epoch % args.print_every) == 0:
+            if epoch ==0 or (epoch % args.print_every) == 9:
                 end_time = time.time()
                 print("[{}] Epoch: {}/{} Loss: {} Execution time: {}".format(\
                         phase, epoch+1, args.epoch, epoch_loss, (end_time-start_time)))

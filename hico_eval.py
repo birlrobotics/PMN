@@ -45,7 +45,7 @@ def main(args):
         vs_gats.to(device)
         vs_gats.eval()
 
-        print(pg_checkpoint['o_c_l'], pg_checkpoint['lr'], pg_checkpoint['dropout'])
+        print(pg_checkpoint['o_c_l'], pg_checkpoint['b_l'], pg_checkpoint['attn'], pg_checkpoint['lr'], pg_checkpoint['dropout'])
         # pgception = PGception(action_num=24, classifier_mod='cat', o_c_l=[64,64,128,128], last_h_c=256, bias=pg_checkpoint['bias'], drop=pg_checkpoint['dropout'], bn=pg_checkpoint['bn'])
         pgception = PGception(action_num=pg_checkpoint['a_n'], layers=1, classifier_mod=pg_checkpoint['classifier_mod'], o_c_l=pg_checkpoint['o_c_l'], last_h_c=pg_checkpoint['last_h_c'], bias=pg_checkpoint['bias'], drop=pg_checkpoint['dropout'], bn=pg_checkpoint['bn'], agg_first=pg_checkpoint['agg_first'], attn=pg_checkpoint['attn'], b_l=pg_checkpoint['b_l'])
         pgception.load_state_dict(pg_checkpoint['state_dict'])

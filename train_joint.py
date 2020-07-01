@@ -19,7 +19,7 @@ import utils.io as io
 ###########################################################################################
 def run_model(args, data_const):
     # prepare data
-    train_dataset = VcocoDataset(data_const=data_const, subset="vcoco_train", pg_only=False)
+    train_dataset = VcocoDataset(data_const=data_const, subset="vcoco_trainval", pg_only=False)
     val_dataset = VcocoDataset(data_const=data_const, subset="vcoco_val", pg_only=False)
     dataset = {'train': train_dataset, 'val': val_dataset}
 
@@ -51,6 +51,7 @@ def run_model(args, data_const):
         print(f"loading pretrained model {args.pretrained}")
         checkpoints = torch.load(args.pretrained, map_location=device)
         model.load_state_dict(checkpoints['state_dict'])
+
     model.to(device)
     # # build optimizer && criterion  
     if args.optim == 'sgd':
@@ -64,12 +65,30 @@ def run_model(args, data_const):
     # set visualization and create folder to save checkpoints
     writer = SummaryWriter(log_dir=args.log_dir + '/' + args.exp_ver)
     io.mkdir_if_not_exists(os.path.join(args.save_dir, args.exp_ver), recursive=True)
+
+    # load pretrained model of HICO_DET dataset
+    if args.hico:
+        print(f"loading pretrained model of HICO_DET dataset {args.hico}")
+        hico_checkpoints = torch.load(args.hico, map_location=device)
+        # import ipdb; ipdb.set_trace()
+        hico_dict = hico_checkpoints['state_dict']
+        model_dict = model.state_dict()
+        need_dict = {k:v for k,v in hico_dict.items() if k not in ['classifier.4.weight', 'classifier.4.bias']}
+        model_dict.update(need_dict)
+        model.load_state_dict(model_dict)
+        # fine-turn
+        if args.fine_turn:
+            last_layer_params = list(map(id, model.classifier[4].parameters()))
+            base_params = filter(lambda p: id(p) not in last_layer_params, model.parameters())
+            optimizer = optim.Adam([{'params': base_params, 'lr': args.lr}, {'params': model.classifier[4].parameters(), 'lr': 3e-5}], weight_decay=0)
+    print(optimizer)
+
     # start training
     for epoch in range(args.start_epoch, args.epoch):
         # each epoch has a training and validation step
         epoch_loss = 0
         # for phase in ['train', 'val']:
-        for phase in ['train', 'val']:
+        for phase in ['train']:
             start_time = time.time()
             running_loss = 0
             # all_edge = 0
@@ -127,13 +146,13 @@ def run_model(args, data_const):
                 running_loss += loss.item() * edge_labels.shape[0]
 
             epoch_loss = running_loss / len(dataset[phase])
-            if phase == 'train':
-                train_loss = epoch_loss 
-            else:
-                writer.add_scalars('trainval_loss_epoch', {'train': train_loss, 'val': epoch_loss}, epoch)
-            # writer.add_scalars('trainval_loss_epoch', {'train': epoch_loss}, epoch)
+            # if phase == 'train':
+            #     train_loss = epoch_loss 
+            # else:
+            #     writer.add_scalars('trainval_loss_epoch', {'train': train_loss, 'val': epoch_loss}, epoch)
+            writer.add_scalars('trainval_loss_epoch', {'train': epoch_loss}, epoch)
             # print data
-            if (epoch % args.print_every) == 0:
+            if epoch==0 or (epoch % args.print_every) == 9:
                 end_time = time.time()
                 print("[{}] Epoch: {}/{} Loss: {} Execution time: {}".format(\
                         phase, epoch+1, args.epoch, epoch_loss, (end_time-start_time)))
@@ -230,6 +249,11 @@ parser.add_argument('--print_every', type=int, default=10,
                     help='number of steps for printing training and validation loss: 10')
 parser.add_argument('--save_every', type=int, default=20,
                     help='number of steps for saving the model parameters: 50') 
+
+parser.add_argument('--hico',  type=str, default=None,
+                    help='location of the pretrained model of HICO_DET dataset: None')
+parser.add_argument('--fine_turn', type=str2bool, default='false', 
+                    help='leverage the pretrained model from HICO-DET and fine-turn: false')
 
 args = parser.parse_args() 
 
