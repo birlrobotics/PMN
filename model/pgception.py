@@ -55,23 +55,24 @@ class PGception_Layer(nn.Module):
 			self.branch_all = GCN(A[3], in_channel, out_channel_list[3], bias=bias, drop=drop, bn=bn, init=init, agg_first=agg_first, attn=attn)
 		if 4 in self.branch_list:
 			self.branch_part = GCN(A[4], in_channel, out_channel_list[4], bias=bias, drop=drop, bn=bn, init=init, agg_first=agg_first, attn=attn, part=True)
-	def forward(self, X):
+	def forward(self, x1, x2):
 		# import ipdb; ipdb.set_trace()
 		output = []
 		if 0 in self.branch_list:
-			branch_0 = self.branch_0(X)
+			branch_0 = self.branch_0(x2)
 			output.append(branch_0)
 		if 1 in self.branch_list:
-			branch_1 = self.branch_1(X)
+			branch_1 = self.branch_1(x1)
 			output.append(branch_1)
 		if 2 in self.branch_list:
-			branch_2 = self.branch_2(X)
+			branch_2 = self.branch_2(x1)
 			output.append(branch_2)
 		if 3 in self.branch_list:
-			branch_all = self.branch_all(X)
+			# import ipdb; ipdb.set_trace()
+			branch_all = self.branch_all(x1)
 			output.append(branch_all)
 		if 4 in self.branch_list:
-			branch_part = self.branch_part(X)
+			branch_part = self.branch_part(x1)
 			return torch.cat(output, 2), branch_part
 		
 		return torch.cat(output, 2)
@@ -79,24 +80,30 @@ class PGception_Layer(nn.Module):
 class Block(nn.Module):
 	def __init__(self, in_channel, mid_channel, out_channel_list, branch_list, bias=True, drop=None, bn=False, agg_first=True, attn=False):
 		super(Block, self).__init__()
-		self.linear = nn.Linear(in_channel, mid_channel, bias)
+		self.linear1 = nn.Linear(in_channel, mid_channel, bias)
+		self.linear2 = nn.Linear(in_channel, mid_channel, bias)
 		self.pgception = PGception_Layer(mid_channel, out_channel_list, branch_list, bias=bias, drop=drop, bn=bn, agg_first=agg_first, attn=attn)
 		self.drop = drop
 		self.bn = bn
 		if drop:
 			self.dropout = nn.Dropout(drop)
 		if bn:
-			self.batchnorm = nn.BatchNorm1d(17)
+			self.batchnorm1 = nn.BatchNorm1d(17)
+			self.batchnorm2 = nn.BatchNorm1d(17)
 
-	def forward(self, X):
+	def forward(self, x1, x2):
 		# import ipdb; ipdb.set_trace()
-		X = self.linear(X)
+		x1 = self.linear1(x1)
+		x2 = self.linear2(x2)
 		if self.bn:
-			X = self.batchnorm(X)
-		X = F.relu(X)
+			x1 = self.batchnorm1(x1)
+			x2 = self.batchnorm2(x2)
+		x1 = F.relu(x1)
+		x2 = F.relu(x2)
 		if self.drop:
-			X = self.dropout(X)
-		return self.pgception(X)
+			x1 = self.dropout(x1)
+			x2 = self.dropout(x2)
+		return self.pgception(x1, x2)
 
 class PGception(nn.Module):
 	def __init__(self, action_num=24, layers=1, classifier_mod="cat", o_c_l=[64,64,128,128], b_l=[0,1,2,3] ,last_h_c=256, bias=True, drop=None, bn=False, agg_first=True, attn=False):
@@ -149,12 +156,16 @@ class PGception(nn.Module):
 									   nn.Linear(last_h_c, action_num, bias),
 									)
 
-	def forward(self, x):
+	def forward(self, x1, x2):
+		'''
+		x1 is the pose_to_box features,
+		x2 is the pose_to_obj_offset features
+		'''
 		# import ipdb; ipdb.set_trace()
 		if 4 in self.branch_list:
-			x, x_part = self.block1(x)
+			x, x_part = self.block1(x1, x2)
 		else:
-			x = self.block1(x)
+			x = self.block1(x1, x2)
 		if self.layers >1:
 			x = self.block2(x)
 		if self.classifier_mod == "mean":

@@ -79,10 +79,15 @@ def main(args):
             spatial_feat = data['spatial_feat']
             word2vec = data['word2vec']
             # pose_labels = data['pose_labels']
-            pose_feat = data["pose_feat"]
+            # pose_feat = data["pose_feat"]
+            # pose_normalized = data["pose_to_obj"]
+            pose_normalized = data["pose_to_human"]
+            # pose_normalized = data["pose_to_human_tight"]
+            pose_to_obj_offset = data["pose_to_obj_offset"]
             # mask = data['mask']
             # referencing
-            pose_feat, features, spatial_feat, word2vec = pose_feat.to(device), features.to(device), spatial_feat.to(device), word2vec.to(device)
+            features, spatial_feat, word2vec = features.to(device), spatial_feat.to(device), word2vec.to(device)
+            pose_to_obj_offset, pose_normalized =  pose_to_obj_offset.to(device), pose_normalized.to(device)
             # mask = mask.to(device)
             outputs, attn, attn_lang = vs_gats(node_num, features, spatial_feat, word2vec, [roi_labels])    # !NOTE: it is important to set [roi_labels] 
 
@@ -92,13 +97,13 @@ def main(args):
             # attn_lang = attn_lang.cpu().detach().numpy()
     
             if 'b_l' in checkpoint.keys() and 4 in checkpoint['b_l']:
-                pg_outputs1, pg_outputs2 = pgception(pose_feat)
+                pg_outputs1, pg_outputs2 = pgception(pose_normalized, pose_to_obj_offset)
                 action_scores = nn.Sigmoid()(outputs+pg_outputs1+pg_outputs2)
             # pg_action_scores = nn.Sigmoid()(pg_outputs)
             # pg_action_scores = pg_action_scores.cpu().detach().numpy()
             # action_scores = nn.Sigmoid()(outputs+pg_outputs.mul(mask))
             else:
-                pg_outputs = pgception(pose_feat)
+                pg_outputs = pgception(pose_normalized, pose_to_obj_offset)
                 action_scores = nn.Sigmoid()(outputs+pg_outputs)
             # action_scores = nn.Sigmoid()(outputs) + nn.Sigmoid()(pg_outputs)
             action_scores = action_scores.cpu().detach().numpy()

@@ -4,6 +4,7 @@ ray_results
 inference_imgs
 __pycache__
 .vscode
+imgs
 
 
 *.pyc

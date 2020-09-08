@@ -12,6 +12,7 @@ from datasets.hico_constants import HicoConstants
 from datasets.hico_dataset import HicoDataset, collate_fn
 from model.vsgats.model import AGRNN
 from model.pgception import PGception
+# from model.no_frill_pose_net import fully_connect as PGception
 import utils.io as io
 
 ###########################################################################################
@@ -19,7 +20,7 @@ import utils.io as io
 ###########################################################################################
 def run_model(args, data_const):
     # prepare data
-    train_dataset = HicoDataset(data_const=data_const, subset='train_val')
+    train_dataset = HicoDataset(data_const=data_const, subset='train')
     val_dataset = HicoDataset(data_const=data_const, subset='val')
     dataset = {'train': train_dataset, 'val': val_dataset}
 
@@ -43,8 +44,10 @@ def run_model(args, data_const):
     vs_gats.eval()
 
     # [64,64,128,128], [128,256,256,256]
+    print(args.b_l, args.o_c_l)
     model = PGception(action_num=args.a_n, layers=args.n_layers, classifier_mod=args.c_m, o_c_l=args.o_c_l, b_l=args.b_l,
                       last_h_c=args.last_h_c, bias=args.bias, drop=args.d_p, bn=args.bn, agg_first=args.agg_first, attn=args.attn)
+    # model = PGception(action_num=args.a_n, drop=args.d_p)
     # load pretrained model
     if args.pretrained:
         print(f"loading pretrained model {args.pretrained}")
@@ -67,8 +70,8 @@ def run_model(args, data_const):
     for epoch in range(args.start_epoch, args.epoch):
         # each epoch has a training and validation step
         epoch_loss = 0
-        # for phase in ['train', 'val']:
-        for phase in ['train']:
+        for phase in ['train', 'val']:
+        # for phase in ['train']:
             start_time = time.time()
             running_loss = 0
             # import ipdb; ipdb.set_trace()
@@ -79,32 +82,34 @@ def run_model(args, data_const):
                 spatial_feat = data['spatial_feat']
                 word2vec = data['word2vec']
                 edge_labels = data['edge_labels']
-                pose_feat = data["pose_feat"]
+                # pose_feat = data["pose_feat"]
+                pose_normalized = data["pose_to_human"]
+                pose_to_obj_offset = data["pose_to_obj_offset"]
                 features, spatial_feat, word2vec, edge_labels = features.to(device), spatial_feat.to(device), word2vec.to(device), edge_labels.to(device)
-                pose_feat, edge_labels = pose_feat.to(device), edge_labels.to(device)
+                pose_to_obj_offset, pose_normalized, edge_labels =  pose_to_obj_offset.to(device), pose_normalized.to(device), edge_labels.to(device)
                 # mask = mask.to(device)
                 if phase == "train":
                     model.train()
                     model.zero_grad()
                     # import ipdb; ipdb.set_trace()
-                    outputs = vs_gats(node_num, features, spatial_feat, word2vec, roi_labels, validation=True) + model(pose_feat)
+                    outputs = vs_gats(node_num, features, spatial_feat, word2vec, roi_labels, validation=True) + model(pose_normalized, pose_to_obj_offset)
                     loss = criterion(outputs, edge_labels)
                     loss.backward()
                     optimizer.step()
                 else:
                     model.eval()
                     with torch.no_grad():
-                        outputs = vs_gats(node_num, features, spatial_feat, word2vec, roi_labels, validation=True) + model(pose_feat)
+                        outputs = vs_gats(node_num, features, spatial_feat, word2vec, roi_labels, validation=True) + model(pose_normalized, pose_to_obj_offset)
                         loss = criterion(outputs, edge_labels)
 
                 running_loss += loss.item() * edge_labels.shape[0]
 
             epoch_loss = running_loss / len(dataset[phase])
-            # if phase == 'train':
-            #     train_loss = epoch_loss 
-            # else:
-            #     writer.add_scalars('trainval_loss_epoch', {'train': train_loss, 'val': epoch_loss}, epoch)
-            writer.add_scalars('trainval_loss_epoch', {'train': epoch_loss}, epoch)
+            if phase == 'train':
+                train_loss = epoch_loss 
+            else:
+                writer.add_scalars('trainval_loss_epoch', {'train': train_loss, 'val': epoch_loss}, epoch)
+            # writer.add_scalars('trainval_loss_epoch', {'train': epoch_loss}, epoch)
             # print data
             if epoch ==0 or (epoch % args.print_every) == 9:
                 end_time = time.time()
@@ -167,7 +172,7 @@ parser.add_argument('--epoch', type=int, default=300,
                     help='number of epochs to train: 300') 
 parser.add_argument('--scheduler_step', '--s_s', type=int, default=0,
                     help='number of epochs to train: 0')
-parser.add_argument('--o_c_l', type=list, default= [64,64,128,128],     # [128,256,256,256] [64,64,128,128]
+parser.add_argument('--o_c_l', type=list, default= [64,64,64,64],     # [64,64,128,128] [64,64,128,128]
                     help='out channel in each branch in PGception layer: [128,256,256,256]')
 parser.add_argument('--b_l', type=int, nargs='+', default= [0,1,2,3],     # [128,256,256,256] [64,64,128,128]
                     help='which branchs are in PGception layer: [0,1,2,3]')

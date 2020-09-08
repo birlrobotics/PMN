@@ -61,7 +61,7 @@ def run_model(args, data_const):
     else:
         optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=0, amsgrad=True)
     criterion = nn.BCEWithLogitsLoss()
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=args.scheduler_step, gamma=0.1) #the scheduler divides the lr by 10 every 150 epochs
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=args.scheduler_step, gamma=0.1) #the scheduler divides the lr by 10 every 400 epochs
     # set visualization and create folder to save checkpoints
     writer = SummaryWriter(log_dir=args.log_dir + '/' + args.exp_ver)
     io.mkdir_if_not_exists(os.path.join(args.save_dir, args.exp_ver), recursive=True)
@@ -105,11 +105,15 @@ def run_model(args, data_const):
                 spatial_feat = data['spatial_feat']
                 word2vec = data['word2vec']
                 edge_labels = data['edge_labels']
-                pose_feat = data["pose_feat"]
+                # pose_feat = data["pose_feat"]
+                # pose_normalized = data["pose_to_obj"]
+                pose_normalized = data["pose_to_human"]
+                # pose_normalized = data["pose_to_human_tight"]
+                pose_to_obj_offset = data["pose_to_obj_offset"]
                 # labels = data['pose_labels']
                 # mask = data['mask']
                 features, spatial_feat, word2vec, edge_labels = features.to(device), spatial_feat.to(device), word2vec.to(device), edge_labels.to(device)
-                pose_feat, edge_labels = pose_feat.to(device), edge_labels.to(device)
+                pose_to_obj_offset, pose_normalized, edge_labels =  pose_to_obj_offset.to(device), pose_normalized.to(device), edge_labels.to(device)
                 # mask = mask.to(device)
                 if phase == "train":
                     model.train()
@@ -120,10 +124,10 @@ def run_model(args, data_const):
                     # outputs = outputs1+outputs2
                     # outputs = vs_gats(node_num, features, spatial_feat, word2vec, roi_labels, validation=True) + model(pose_feat).mul(mask) 
                     if 4 in args.b_l:
-                        outputs1, outputs2 = model(pose_feat)
+                        outputs1, outputs2 = model(pose_normalized, pose_to_obj_offset)
                         outputs = outputs1 + outputs2 + vs_gats(node_num, features, spatial_feat, word2vec, roi_labels, validation=True) 
                     else:
-                        outputs = vs_gats(node_num, features, spatial_feat, word2vec, roi_labels, validation=True) + model(pose_feat)
+                        outputs = vs_gats(node_num, features, spatial_feat, word2vec, roi_labels, validation=True) + model(pose_normalized, pose_to_obj_offset)
                     # outputs = model(pose_feat)
                     loss = criterion(outputs, edge_labels)
                     loss.backward()
@@ -136,10 +140,10 @@ def run_model(args, data_const):
                         # outputs = outputs1+outputs2
                         # outputs = vs_gats(node_num, features, spatial_feat, word2vec, roi_labels, validation=True) + model(pose_feat).mul(mask)
                         if 4 in args.b_l:
-                            outputs1, outputs2 = model(pose_feat)
+                            outputs1, outputs2 = model(pose_normalized, pose_to_obj_offset)
                             outputs = outputs1 + outputs2 + vs_gats(node_num, features, spatial_feat, word2vec, roi_labels, validation=True) 
                         else:
-                            outputs = vs_gats(node_num, features, spatial_feat, word2vec, roi_labels, validation=True) + model(pose_feat)
+                            outputs = vs_gats(node_num, features, spatial_feat, word2vec, roi_labels, validation=True) + model(pose_normalized, pose_to_obj_offset)
                         # outputs = model(pose_feat)
                         loss = criterion(outputs, edge_labels)
 
@@ -155,11 +159,10 @@ def run_model(args, data_const):
             if epoch==0 or (epoch % args.print_every) == 9:
                 end_time = time.time()
                 print("[{}] Epoch: {}/{} Loss: {} Execution time: {}".format(\
-                        phase, epoch+1, args.epoch, epoch_loss, (end_time-start_time)))
-        # if args.scheduler_step and epoch % 10 == 9 and epoch < 300:    
+                        phase, epoch+1, args.epoch, epoch_loss, (end_time-start_time)))   
         if args.scheduler_step:   
             scheduler.step()
-        # save model epoch_loss<0.29 or 
+        # save model 
         if epoch % args.save_every == (args.save_every - 1) and epoch >= (300-1):
             checkpoint = { 
                             'lr': args.lr,
@@ -209,7 +212,7 @@ parser.add_argument('--bias', type=str2bool, default='true',
                     help="add bias to fc layers or not: True")
 parser.add_argument('--bn', type=str2bool, default='false', 
                     help='use batch normailzation or not: true')
-parser.add_argument('--epoch', type=int, default=1000,
+parser.add_argument('--epoch', type=int, default=700,
                     help='number of epochs to train: 300') 
 parser.add_argument('--scheduler_step', '--s_s', type=int, default=0,
                     help='number of epochs to train: 0')
@@ -218,7 +221,7 @@ parser.add_argument('--o_c_l', type=int, nargs='+', default= [64,64,128,128,128]
 parser.add_argument('--b_l', type=int, nargs='+', default= [0,1,2,3],     # [128,256,256,256] [64,64,128,128]
                     help='which branchs are in PGception layer: [0,1,2,3]')
 parser.add_argument('--last_h_c', type=int, default=256,
-                    help='the channel of last hidden layer: 512') 
+                    help='the channel of last hidden layer: 256') 
 parser.add_argument('--start_epoch', type=int, default=0,
                     help='number of beginning epochs : 0') 
 parser.add_argument('--c_m',  type=str, default="cat", choices=['cat', 'mean'],
@@ -247,7 +250,7 @@ parser.add_argument('--exp_ver', '--e_v', type=str, default='v1',
 
 parser.add_argument('--print_every', type=int, default=10,
                     help='number of steps for printing training and validation loss: 10')
-parser.add_argument('--save_every', type=int, default=20,
+parser.add_argument('--save_every', type=int, default=10,
                     help='number of steps for saving the model parameters: 50') 
 
 parser.add_argument('--hico',  type=str, default=None,

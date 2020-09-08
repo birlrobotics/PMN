@@ -93,6 +93,10 @@ def cal_pose_to_img(keypoint, im_wh):
     feat = keypoint / im_wh
     return feat
 
+def cal_pose_to_box_offset(keypoint, box, im_wh):
+    feat = (keypoint - (np.array([box[0]+box[2], box[1]+box[3]])/2)) / np.array(im_wh)
+    return feat
+
 def calculate_spatial_feats(det_boxes, im_wh):
     spatial_feats = []
     for i in range(det_boxes.shape[0]):
@@ -114,6 +118,8 @@ def calculate_spatial_feats(det_boxes, im_wh):
 def calculate_spatial_pose_feats(det_boxes, keypoints, im_wh):
     spatial_feats = []
     pose_to_obj = []
+    pose_to_human = []
+    pose_to_obj_offset = []
     # ipdb.set_trace()
     for i in range(det_boxes.shape[0]):
         for j in range(det_boxes.shape[0]):
@@ -130,13 +136,16 @@ def calculate_spatial_pose_feats(det_boxes, keypoints, im_wh):
                 spatial_feats.append(single_feat)
                 
                 if i < keypoints.shape[0]:
-                    pose_to_obj.append(cal_pose_to_box(keypoints[i],det_boxes[j]))
+                    pose_to_human.append(cal_pose_to_box(keypoints[i], det_boxes[i]))
+                    # pose_to_obj.append(cal_pose_to_box(keypoints[i],det_boxes[j]))
+                    pose_to_obj_offset.append(cal_pose_to_box_offset(keypoints[i], det_boxes[j], im_wh))
     spatial_feats = np.array(spatial_feats)
-    # pose_to_human = np.array(pose_to_human)
+    pose_to_human = np.array(pose_to_human)
+    pose_to_obj_offset = np.array(pose_to_obj_offset)
     # pose_to_img = np.array(pose_to_img)
-    pose_to_obj = np.array(pose_to_obj)
-    # return spatial_feats, pose_to_human, pose_to_img, pose_to_obj
-    return spatial_feats, pose_to_obj
+    # pose_to_obj = np.array(pose_to_obj)
+    return spatial_feats, pose_to_obj, pose_to_human, pose_to_obj_offset 
+    # return spatial_feats, pose_to_obj
 
 if __name__=="__main__":
     data_const = HicoConstants()
@@ -167,10 +176,14 @@ if __name__=="__main__":
             img_hw = np.array(anno_dict[global_id]["image_size"])[:2]
             img_wh = [img_hw[1], img_hw[0]]
             # spatial_feats = calculate_spatial_feats(det_boxes, img_wh)
-            spatial_feats, pose_to_obj = calculate_spatial_pose_feats(det_boxes, keypoints, img_wh)
+            spatial_feats, pose_to_obj, pose_to_human, pose_to_obj_offset = calculate_spatial_pose_feats(det_boxes, keypoints, img_wh)
             save_data.create_dataset(global_id, data=spatial_feats)
-            norm_keypoints.create_dataset(global_id, data=pose_to_obj)
-
+            # norm_keypoints.create_dataset(global_id, data=pose_to_obj)
+            # save feature related to pose
+            norm_keypoints.create_group(str(global_id))
+            norm_keypoints[str(global_id)].create_dataset('pose_to_human', data=pose_to_human)
+            # norm_keypoints[str(global_id)].create_dataset('pose_to_obj', data=pose_to_obj)
+            norm_keypoints[str(global_id)].create_dataset('pose_to_obj_offset', data=pose_to_obj_offset)
         save_data.close()
         norm_keypoints.close()
     print('Finished!!!')
