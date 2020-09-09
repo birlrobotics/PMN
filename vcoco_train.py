@@ -95,56 +95,40 @@ def run_model(args, data_const):
             idx = 0
             # import ipdb; ipdb.set_trace()
             for data in tqdm(dataloader[phase]):
-                # img_name = data['img_name']
-                # det_boxes = data['det_boxes']
                 roi_labels = data['roi_labels']
-                # roi_scores = data['roi_scores']
                 node_num = data['node_num']
-                # edge_num = data['edge_num']
                 features = data['features']
                 spatial_feat = data['spatial_feat']
                 word2vec = data['word2vec']
                 edge_labels = data['edge_labels']
-                # pose_feat = data["pose_feat"]
-                # pose_normalized = data["pose_to_obj"]
                 pose_normalized = data["pose_to_human"]
-                # pose_normalized = data["pose_to_human_tight"]
                 pose_to_obj_offset = data["pose_to_obj_offset"]
-                # labels = data['pose_labels']
-                # mask = data['mask']
+
                 features, spatial_feat, word2vec, edge_labels = features.to(device), spatial_feat.to(device), word2vec.to(device), edge_labels.to(device)
                 pose_to_obj_offset, pose_normalized, edge_labels =  pose_to_obj_offset.to(device), pose_normalized.to(device), edge_labels.to(device)
-                # mask = mask.to(device)
+
                 if phase == "train":
                     model.train()
                     model.zero_grad()
-                    # import ipdb; ipdb.set_trace()
-                    # outputs1 = vs_gats(node_num, features, spatial_feat, word2vec, roi_labels, validation=True)
-                    # outputs2 = model(pose_feat)
-                    # outputs = outputs1+outputs2
-                    # outputs = vs_gats(node_num, features, spatial_feat, word2vec, roi_labels, validation=True) + model(pose_feat).mul(mask) 
+                    # for the part-body graph, under testing
                     if 4 in args.b_l:
                         outputs1, outputs2 = model(pose_normalized, pose_to_obj_offset)
                         outputs = outputs1 + outputs2 + vs_gats(node_num, features, spatial_feat, word2vec, roi_labels, validation=True) 
                     else:
                         outputs = vs_gats(node_num, features, spatial_feat, word2vec, roi_labels, validation=True) + model(pose_normalized, pose_to_obj_offset)
-                    # outputs = model(pose_feat)
+
                     loss = criterion(outputs, edge_labels)
                     loss.backward()
                     optimizer.step()
                 else:
                     model.eval()
                     with torch.no_grad():
-                        # outputs1 = vs_gats(node_num, features, spatial_feat, word2vec, roi_labels, validation=True)
-                        # outputs2 = model(pose_feat)
-                        # outputs = outputs1+outputs2
-                        # outputs = vs_gats(node_num, features, spatial_feat, word2vec, roi_labels, validation=True) + model(pose_feat).mul(mask)
                         if 4 in args.b_l:
                             outputs1, outputs2 = model(pose_normalized, pose_to_obj_offset)
                             outputs = outputs1 + outputs2 + vs_gats(node_num, features, spatial_feat, word2vec, roi_labels, validation=True) 
                         else:
                             outputs = vs_gats(node_num, features, spatial_feat, word2vec, roi_labels, validation=True) + model(pose_normalized, pose_to_obj_offset)
-                        # outputs = model(pose_feat)
+
                         loss = criterion(outputs, edge_labels)
 
                 running_loss += loss.item() * edge_labels.shape[0]
@@ -212,11 +196,11 @@ parser.add_argument('--bias', type=str2bool, default='true',
                     help="add bias to fc layers or not: True")
 parser.add_argument('--bn', type=str2bool, default='false', 
                     help='use batch normailzation or not: true')
-parser.add_argument('--epoch', type=int, default=700,
-                    help='number of epochs to train: 300') 
+parser.add_argument('--epoch', type=int, default=600,
+                    help='number of epochs to train: 600') 
 parser.add_argument('--scheduler_step', '--s_s', type=int, default=0,
                     help='number of epochs to train: 0')
-parser.add_argument('--o_c_l', type=int, nargs='+', default= [64,64,128,128,128],     # [128,256,256,256] [64,64,128,128]
+parser.add_argument('--o_c_l', type=int, nargs='+', default= [64,64,64,64,128],     # [128,256,256,256] [64,64,128,128]
                     help='out channel in each branch in PGception layer: [128,256,256,256]')
 parser.add_argument('--b_l', type=int, nargs='+', default= [0,1,2,3],     # [128,256,256,256] [64,64,128,128]
                     help='which branchs are in PGception layer: [0,1,2,3]')
@@ -239,8 +223,8 @@ parser.add_argument('--attn',  type=str2bool, default='false',
 
 parser.add_argument('--pretrained', '-p', type=str, default=None,
                     help='location of the pretrained model file for training: None')
-parser.add_argument('--main_pretrained', '--m_p', type=str, default='/home/birl/ml_dl_projects/bigjun/hoi/PGception/checkpoints/vcoco_vsgats/hico_checkpoint_600_epoch.pth',
-                    help='Location of the checkpoint file of exciting method: /home/birl/ml_dl_projects/bigjun/hoi/PGception/checkpoints/vcoco_vsgats/hico_checkpoint_600_epoch.pth')
+parser.add_argument('--main_pretrained', '--m_p', type=str, default='./checkpoints/vcoco_vsgats/hico_checkpoint_600_epoch.pth',
+                    help='Location of the checkpoint file of exciting method: ./checkpoints/vcoco_vsgats/hico_checkpoint_600_epoch.pth')
 parser.add_argument('--log_dir', type=str, default='./log/vcoco',
                     help='path to save the log data like loss\accuracy... : ./log') 
 parser.add_argument('--save_dir', type=str, default='./checkpoints/vcoco',

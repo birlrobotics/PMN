@@ -47,9 +47,8 @@ def main(args):
         vs_gats.eval()
 
         print(pg_checkpoint['o_c_l'], pg_checkpoint['b_l'], pg_checkpoint['attn'], pg_checkpoint['lr'], pg_checkpoint['dropout'])
-        # pgception = PGception(action_num=24, classifier_mod='cat', o_c_l=[64,64,128,128], last_h_c=256, bias=pg_checkpoint['bias'], drop=pg_checkpoint['dropout'], bn=pg_checkpoint['bn'])
         pgception = PGception(action_num=pg_checkpoint['a_n'], layers=1, classifier_mod=pg_checkpoint['classifier_mod'], o_c_l=pg_checkpoint['o_c_l'], last_h_c=pg_checkpoint['last_h_c'], bias=pg_checkpoint['bias'], drop=pg_checkpoint['dropout'], bn=pg_checkpoint['bn'], agg_first=pg_checkpoint['agg_first'], attn=pg_checkpoint['attn'], b_l=pg_checkpoint['b_l'])
-        # pgception = PGception(action_num=pg_checkpoint['a_n'], drop=pg_checkpoint['dropout'])
+
         pgception.load_state_dict(pg_checkpoint['state_dict'])
         pgception.to(device)
         pgception.eval()
@@ -69,7 +68,6 @@ def main(args):
     # for global_id in tqdm(test_list): 
     for data in tqdm(test_dataloader):
         global_id = data['global_id'][0]
-        # img_name = data['img_name'][0]
         det_boxes = data['det_boxes'][0]
         roi_scores = data['roi_scores'][0]
         roi_labels = data['roi_labels'][0]
@@ -77,7 +75,6 @@ def main(args):
         features = data['features'] 
         spatial_feat = data['spatial_feat']
         word2vec = data['word2vec']
-        # pose_feat = data["pose_feat"]
         pose_normalized = data["pose_to_human"]
         pose_to_obj_offset = data["pose_to_obj_offset"]
 
@@ -86,29 +83,20 @@ def main(args):
         outputs, attn, attn_lang = vs_gats(node_num, features, spatial_feat, word2vec, [roi_labels])    # !NOTE: it is important to set [roi_labels] 
         pg_outputs = pgception(pose_normalized, pose_to_obj_offset)
         action_scores = nn.Sigmoid()(outputs+pg_outputs)
-        # action_scores = nn.Sigmoid()(outputs)
         action_scores = action_scores.cpu().detach().numpy()
         # save detection result
         pred_hois.create_group(global_id)
         det_data_dict = {}
         h_idxs = np.where(roi_labels == 1)[0]
-        # labeled_edge_list = np.cumsum(node_num - np.arange(len(h_idxs)) - 1)
-        # labeled_edge_list[-1] = 0
         for h_idx in h_idxs:
             for i_idx in range(len(roi_labels)):
-                # if i_idx <= h_idx:
-                #     continue
-                # # import ipdb; ipdb.set_trace()
-                # edge_idx = labeled_edge_list[h_idx-1] + (i_idx-h_idx-1)
-
                 if i_idx == h_idx:
                     continue
                 if h_idx > i_idx:
                     edge_idx = h_idx * (node_num[0] - 1) + i_idx
                 else:
                     edge_idx = h_idx * (node_num[0] - 1) + i_idx - 1
-
-                # score = roi_scores[h_idx] * roi_scores[i_idx] * action_score[edge_idx] * (attn[h_idx][i_idx-1]+attn_lang[h_idx][i_idx-1])
+                    
                 score = roi_scores[h_idx] * roi_scores[i_idx] * action_scores[edge_idx]
                 try:
                     hoi_ids = metadata.obj_hoi_index[roi_labels[i_idx]]
@@ -142,8 +130,8 @@ if __name__ == "__main__":
     parser.add_argument('--pretrained', '-p', type=str, default='checkpoints/v3_2048/epoch_train/checkpoint_300_epoch.pth', 
                         help='Location of the checkpoint file: ./checkpoints/checkpoint_150_epoch.pth')
 
-    parser.add_argument('--main_pretrained', '--m_p', type=str, default='/home/birl/ml_dl_projects/bigjun/hoi/PGception/checkpoints/hico_vsgats/hico_checkpoint.pth',
-                        help='Location of the checkpoint file of exciting method: /home/birl/ml_dl_projects/bigjun/hoi/PGception/checkpoints/hico_vsgats/hico_checkpoint.pth')
+    parser.add_argument('--main_pretrained', '--m_p', type=str, default='./checkpoints/hico_vsgats/hico_checkpoint.pth',
+                        help='Location of the checkpoint file of exciting method: ./checkpoints/hico_vsgats/hico_checkpoint.pth')
 
     parser.add_argument('--gpu', type=str2bool, default='true',
                         help='use GPU or not: true')

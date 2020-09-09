@@ -35,7 +35,6 @@ def main(args):
         pg_checkpoint = torch.load(args.pretrained, map_location=device)
 
         # set up model and initialize it with uploaded checkpoint
-        # ipdb.set_trace()
         if not args.exp_ver:
             args.exp_ver = args.pretrained.split("/")[-2]+"_"+args.pretrained.split("/")[-1].split("_")[-2]
             # import ipdb; ipdb.set_trace()
@@ -78,45 +77,28 @@ def main(args):
             features = data['features'] 
             spatial_feat = data['spatial_feat']
             word2vec = data['word2vec']
-            # pose_labels = data['pose_labels']
-            # pose_feat = data["pose_feat"]
-            # pose_normalized = data["pose_to_obj"]
             pose_normalized = data["pose_to_human"]
-            # pose_normalized = data["pose_to_human_tight"]
             pose_to_obj_offset = data["pose_to_obj_offset"]
-            # mask = data['mask']
+
             # referencing
             features, spatial_feat, word2vec = features.to(device), spatial_feat.to(device), word2vec.to(device)
             pose_to_obj_offset, pose_normalized =  pose_to_obj_offset.to(device), pose_normalized.to(device)
-            # mask = mask.to(device)
+
             outputs, attn, attn_lang = vs_gats(node_num, features, spatial_feat, word2vec, [roi_labels])    # !NOTE: it is important to set [roi_labels] 
 
-            # action_scores = nn.Sigmoid()(outputs)
-            # action_scores = action_scores.cpu().detach().numpy()
-            # attn = attn.cpu().detach().numpy()
-            # attn_lang = attn_lang.cpu().detach().numpy()
-    
             if 'b_l' in checkpoint.keys() and 4 in checkpoint['b_l']:
                 pg_outputs1, pg_outputs2 = pgception(pose_normalized, pose_to_obj_offset)
                 action_scores = nn.Sigmoid()(outputs+pg_outputs1+pg_outputs2)
-            # pg_action_scores = nn.Sigmoid()(pg_outputs)
-            # pg_action_scores = pg_action_scores.cpu().detach().numpy()
-            # action_scores = nn.Sigmoid()(outputs+pg_outputs.mul(mask))
+
             else:
                 pg_outputs = pgception(pose_normalized, pose_to_obj_offset)
                 action_scores = nn.Sigmoid()(outputs+pg_outputs)
-            # action_scores = nn.Sigmoid()(outputs) + nn.Sigmoid()(pg_outputs)
+
             action_scores = action_scores.cpu().detach().numpy()
 
             h_idxs = np.where(roi_labels == 1)[0]
-            # assert h_idxs.shape[0]==pg_action_scores.shape[0]
             # import ipdb; ipdb.set_trace()
             for h_idx in h_idxs:
-                # if np.all(pose_feat[h_idx].cpu().numpy()==0):
-                #     # import ipdb; ipdb.set_trace()
-                #     pg_score = np.zeros(24)
-                # else:
-                #     pg_score = pg_action_scores[h_idx]
                 for i_idx in range(node_num[0]):
                     if i_idx == h_idx:
                         continue
@@ -128,7 +110,6 @@ def main(args):
                         edge_idx = h_idx * (node_num[0] - 1) + i_idx
                     else:
                         edge_idx = h_idx * (node_num[0] - 1) + i_idx - 1
-                    # score = roi_scores[h_idx] * roi_scores[i_idx] * action_score[edge_idx] * (attn[h_idx][i_idx-1]+attn_lang[h_idx][i_idx-1])
                     try:
                         score = roi_scores[h_idx] * roi_scores[i_idx] * action_scores[edge_idx]
                         # score = score + pg_score
@@ -173,14 +154,12 @@ if __name__ == "__main__":
     parser.add_argument('--pretrained', '-p', type=str, default='checkpoints/v3_2048/epoch_train/checkpoint_300_epoch.pth', #default='checkpoints/v3_2048/epoch_train/checkpoint_300_epoch.pth',
                         help='Location of the checkpoint file: ./checkpoints/checkpoint_150_epoch.pth')
 
-    parser.add_argument('--main_pretrained', '--m_p', type=str, default='/home/birl/ml_dl_projects/bigjun/hoi/PGception/checkpoints/vcoco_vsgats/hico_checkpoint_600_epoch.pth',
-                        help='Location of the checkpoint file of exciting method: /home/birl/ml_dl_projects/bigjun/hoi/PGception/checkpoints/vcoco_vsgats/hico_checkpoint_600_epoch.pth')
+    parser.add_argument('--main_pretrained', '--m_p', type=str, default='./checkpoints/vcoco_vsgats/hico_checkpoint_600_epoch.pth',
+                        help='Location of the checkpoint file of exciting method: ./checkpoints/vcoco_vsgats/hico_checkpoint_600_epoch.pth')
 
     parser.add_argument('--gpu', type=str2bool, default='true',
                         help='use GPU or not: true')
 
-    # parser.add_argument('--feat_type', '--f_t', type=str, default='fc7', required=True, choices=['fc7', 'pool'],
-    #                     help='if using graph head, here should be pool: default(fc7) ')
 
     parser.add_argument('--exp_ver', '--e_v', type=str, default=None, 
                         help='the version of code, will create subdir in log/ && checkpoints/ ')

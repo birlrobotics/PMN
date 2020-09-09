@@ -20,7 +20,7 @@ import utils.io as io
 ###########################################################################################
 def run_model(args, data_const):
     # prepare data
-    train_dataset = HicoDataset(data_const=data_const, subset='train')
+    train_dataset = HicoDataset(data_const=data_const, subset='train_val')
     val_dataset = HicoDataset(data_const=data_const, subset='val')
     dataset = {'train': train_dataset, 'val': val_dataset}
 
@@ -70,8 +70,8 @@ def run_model(args, data_const):
     for epoch in range(args.start_epoch, args.epoch):
         # each epoch has a training and validation step
         epoch_loss = 0
-        for phase in ['train', 'val']:
-        # for phase in ['train']:
+        # for phase in ['train', 'val']:
+        for phase in ['train']:
             start_time = time.time()
             running_loss = 0
             # import ipdb; ipdb.set_trace()
@@ -105,11 +105,11 @@ def run_model(args, data_const):
                 running_loss += loss.item() * edge_labels.shape[0]
 
             epoch_loss = running_loss / len(dataset[phase])
-            if phase == 'train':
-                train_loss = epoch_loss 
-            else:
-                writer.add_scalars('trainval_loss_epoch', {'train': train_loss, 'val': epoch_loss}, epoch)
-            # writer.add_scalars('trainval_loss_epoch', {'train': epoch_loss}, epoch)
+            # if phase == 'train':
+            #     train_loss = epoch_loss 
+            # else:
+            #     writer.add_scalars('trainval_loss_epoch', {'train': train_loss, 'val': epoch_loss}, epoch)
+            writer.add_scalars('trainval_loss_epoch', {'train': epoch_loss}, epoch)
             # print data
             if epoch ==0 or (epoch % args.print_every) == 9:
                 end_time = time.time()
@@ -168,7 +168,7 @@ parser.add_argument('--bias', type=str2bool, default='true',
                     help="add bias to fc layers or not: True")
 parser.add_argument('--bn', type=str2bool, default='false', 
                     help='use batch normailzation or not: true')
-parser.add_argument('--epoch', type=int, default=300,
+parser.add_argument('--epoch', type=int, default=200,
                     help='number of epochs to train: 300') 
 parser.add_argument('--scheduler_step', '--s_s', type=int, default=0,
                     help='number of epochs to train: 0')
@@ -195,8 +195,8 @@ parser.add_argument('--attn',  type=str2bool, default='false',
 
 parser.add_argument('--pretrained', '-p', type=str, default=None,
                     help='location of the pretrained model file for training: None')
-parser.add_argument('--main_pretrained', '--m_p', type=str, default='/home/birl/ml_dl_projects/bigjun/hoi/PGception/checkpoints/hico_vsgats/checkpoint_260_epoch.pth',
-                    help='Location of the checkpoint file of exciting method: /home/birl/ml_dl_projects/bigjun/hoi/PGception/checkpoints/hico_vsgats/checkpoint_260_epoch.pth')
+parser.add_argument('--main_pretrained', '--m_p', type=str, default='./checkpoints/hico_vsgats/hico_checkpoint.pth',
+                    help='Location of the checkpoint file of exciting method: ./checkpoints/hico_vsgats/hico_checkpoint.pth')
 parser.add_argument('--log_dir', type=str, default='./log/hico',
                     help='path to save the log data like loss\accuracy... : ./log') 
 parser.add_argument('--save_dir', type=str, default='./checkpoints/hico',

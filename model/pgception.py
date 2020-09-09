@@ -158,15 +158,15 @@ class PGception(nn.Module):
 
 	def forward(self, x1, x2):
 		'''
-		x1 is the pose_to_box features,
-		x2 is the pose_to_obj_offset features
+			x1 is the pose_to_box features,
+			x2 is the pose_to_obj_offset features
 		'''
 		# import ipdb; ipdb.set_trace()
 		if 4 in self.branch_list:
 			x, x_part = self.block1(x1, x2)
 		else:
 			x = self.block1(x1, x2)
-		if self.layers >1:
+		if self.layers > 1:
 			x = self.block2(x)
 		if self.classifier_mod == "mean":
 			# import ipdb; ipdb.set_trace()
@@ -179,7 +179,7 @@ class PGception(nn.Module):
 			x = F.relu(x)
 			if self.drop:
 				x = self.dropout(x)
-			# leverage the network for body part
+			# leverage the network for body part, under testing
 			if 4 in self.branch_list:
 				x_part = self.linear_part(x_part)
 				if self.bn:
