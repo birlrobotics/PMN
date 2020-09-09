@@ -1,7 +1,7 @@
 # Pose-based Modular Network for Human-Object Interaction Detection
 
 <!---------------------------------------------------------------------------------------------------------------->
-Official Pytorch implementation for [Pose-based Modular Network for Human-Object Interaction Detection]((https://arxiv.org/abs/2008.02042)).
+Official Pytorch implementation for [Pose-based Modular Network for Human-Object Interaction Detection](https://arxiv.org/abs/2008.02042).
 
 ![overview](./assets/Overview.png)
 
@@ -74,5 +74,5 @@ This codebase was tested with Python 3.6, Pytorch 1.1.0, torchvision 0.3, CUDA 1
 - Please check the paper for the quantitative results and several qualitative detection results are as follow:
     ![detection_results](./assets/detection.png)
 
-### Acknowledgement
+### Acknowledgemen
 In this project, some codes which process the data and eval the model are built upon [VS-GATs: Visual-Semantic Graph Attention Networks for Human-Object Interaction Detecion](https://github.com/birlrobotics/vs-gats), [ECCV2018-Learning Human-Object Interactions by Graph Parsing Neural Networks](https://github.com/SiyuanQi/gpnn) and [ICCV2019-No-Frills Human-Object Interaction Detection: Factorization, Layout Encodings, and Training Techniques](https://github.com/BigRedT/no_frills_hoi_det). Thanks them for their great works.
